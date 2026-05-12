@@ -1,0 +1,1 @@
+parallel.gpu.enableCUDAForwardCompatibility(true)
