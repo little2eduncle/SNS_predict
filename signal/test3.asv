@@ -1,0 +1,161 @@
+clear
+
+rng(1);  % optional: fix random seed
+addpath(genpath(fileparts(mfilename('fullpath'))));
+
+% Plotting Options
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+scale = 2;                    % Factor scaling for screen readability
+FigureWidth = 180;            % Width of the figure in mm
+FontSize = 8;                 % Font size for plot labels and text
+FontName = 'Times New Roman'; % Font name for plot labels and text
+Interpreter = 'latex';        % Font rendering (latex or tex)
+CIp = 0.99;                   % Confidence interval threshold
+
+% Scale the figure size and font
+FigureWidth = FigureWidth * scale;
+FontSize = FontSize * scale;
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Session Parameters
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Define all variable names (order must match unpacking in sampleParameters/processParams)
+variables = {'signal_A', 'decoy_A', 'alpha_A', 'dAC', ...
+             'pa0', 'pa1', 'pc0', 'pc1', 'pd0', 'pd1', 'phi_center'...
+             'signal_B', 'decoy_B', 'alpha_B', 'dBC'};
+
+% List of random variables (subset of variables, order must match thetaR in P_hmm_XX)
+varR = {'decoy_A', 'decoy_B'};
+varF = setdiff(variables, varR);   % fixed variables (Charlie's detector parameters)
+
+% Pulse and optimization parameters
+N = 1e6;
+algorithm = 'quasi-newton';% trust-region or quasi-newton
+maxIters = 1000;
+buffer = 1e4;
+
+% Sampling options (not used here)
+Ns = 1e3;
+Nb = 10;
+display = false;
+chunkSize = 10;
+method = 'srss';
+
+% Protocol parameters
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+z_window = 0.8;                   % Probability that Alice(Bob) chooses Z window
+epsilon = 0.978;                   % Probability that sending signal when Alice(Bob) chooses Z window
+p_decoy = [0.6, 0.2, 0.2];   % Probabilities of sending decoy states
+
+lambda = 0.02 ;       % Phase slice
+fluct_sigma = 0.05;  % Light intensity fluctuation parameters
+
+us = 0.425;   % Signal state light intensity
+u_d1 = 0.1; % Decoy state1 light intensity
+u_d2 = 0.2; % Decoy state2 light intensity
+vacuum = 0;  % Vacuum state light intensity
+
+% Charlie's Parameters (unchanged)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+pa = 0;        % After-pulsing probability
+pc = 0.6;      % Detector efficiency
+pd = 1e-7;     % Dark count probability
+phi_center = 0; % Window center
+
+% Apply slight variation (+/- 10%) to represent detector differences
+pa0 = pa * 0.9;   pa1 = pa * 1.1;
+pc0 = pc * 1;   pc1 = pc * 1;
+pd0 = pd * 0.9;   pd1 = pd * 1.1;
+
+% Group Charlie's parameters
+thetaC = {pa0, pa1, pc0, pc1, pd0, pd1, phi_center};
+
+% Alice's Parameters (unchanged)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+alpha_A = 0.21;   % Attenuation coefficient
+dAC = 50;         % Distance between Alice and Charlie (in km)
+
+signal_A = us;
+decoy_A = [u_d1, u_d2];
+
+% Group Alice's parameters
+thetaA = {signal_A, decoy_A, alpha_A, dAC}; 
+
+% Bob's Parameters (unchanged)
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+alpha_B = 0.21;   % Attenuation coefficient
+dBC = 50;         % Distance between Bob and Charlie (in km)
+
+signal_B = us;
+decoy_B = [u_d1, u_d2];
+
+% Group Bob's parameters
+thetaB = {signal_B, decoy_B, alpha_B, dBC};
+
+% Construct the true parameter set
+thetas = {thetaA, thetaB, thetaC};
+
+colSizes = [numel(decoy_A), numel(decoy_B)];
+
+% Compute prior parameters thetaP, and extract true random variables thetaR and fixed variables thetaF
+% Note: processParams takes the noisy samples as first input (prior means) and the true values as second,
+%       to extract thetaR (true values of random variables) and thetaF (fixed values).
+[thetaP, thetaR, thetaF] = processParams(thetas, varF, varR, fluct_sigma);
+
+% -------------------------------------------------------------------------
+% Run simulation to obtain window counts
+% -------------------------------------------------------------------------
+
+[C_total, C_windows, C_intensity, C_XX_intensity, D0, D1] = ...
+    simulate_SNS_TF_QKD(N, thetaA, thetaB, thetaC, ...
+    'buffer', buffer, ...
+    'z_window', z_window, ...
+    'epsilon', epsilon, ...
+    'p_decoy', p_decoy, ...
+    'lambda', lambda, ...
+    'fluct_sigma', fluct_sigma,...
+    'vacuum', vacuum);
+
+[thetaR_MAP, info] = MAP(C_XX_intensity, varR, thetaF, thetaP, colSizes, ...
+    'lambda', lambda, ...
+    'algorithm', algorithm, ...
+    'maxIters', maxIters, ...
+    'nStarts', 20, ...
+    'relNoise', 0.05, ...
+    'doDiagnostics', true);
+
+% Perform MCMC sampling for posterior distribution of random variables
+% Original labels (one for each variable, totaling 8)
+param_labels = {'Decoy A', ...
+                'Decoy B'};
+
+% Expand into 10 labels based on colSizes
+expanded_labels = {};
+for j = 1:length(colSizes)
+    base = param_labels{j};
+    if colSizes(j) == 1
+        expanded_labels{end+1} = base;
+    else
+        for k = 1:colSizes(j)
+           %If Interpreter is' latex ', use subscript format (such as Signal A_ {1})
+            expanded_labels{end+1} = sprintf('%s_{%d}', base, k);
+        end
+    end
+end
+
+tic;
+
+samples = sample(method, thetaR_MAP, Ns, Nb, ...
+    C_XX_intensity, varR, thetaF, thetaP, lambda, colSizes,...
+    'ground_truth', thetaR, ...
+    'display', display, ...
+    'labels', expanded_labels, ...
+    'FontSize', FontSize, ...
+    'FontName', FontName, ...
+    'Interpreter', Interpreter, ...
+    'FigureWidth', FigureWidth, ...
+    'chunkSize', chunkSize);
+
+
+B = sort(samples, 1, 'ascend');
+disp(B);

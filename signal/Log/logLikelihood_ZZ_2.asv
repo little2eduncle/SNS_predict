@@ -1,0 +1,86 @@
+function [log_likelihood_ZZ, d_log_likelihood_ZZ] = logLikelihood_ZZ_2(C_ZZ, thetaR_ZZ, thetaF_ZZ, fluct_sigma)
+
+    [signal_A, signal_B] = deal(thetaR_ZZ{:});
+    [alpha_A, alpha_B, dAC, dBC, decoy_A, decoy_B, pa0, pa1, pc0, pc1, pd0, pd1] = deal(thetaF_ZZ{:});
+
+    d_log_likelihood_ZZ = zeros(1, 2);
+
+    [result_A, grad_A] = XXwindow_click_prob_asym_screened_fluct( ...
+        signal_A, 0, ...
+        pd0, pc0, pa0, ...
+        pd1, pc1, pa1, ...
+        alpha_A, alpha_B, dAC, dBC, ...
+        lambda, fluct_sigma, ...
+        'nGH', 15);
+
+    % Model probability order:
+    % [only D0, only D1, rest]
+    P3_A = [result_A.P_only_D0, result_A.P_only_D1, result_A.P_rest];
+    P3_A = max(P3_A, eps);
+
+    % Simulation event order:
+    % [D1_only, D0_only, rest]
+    Ck_A = squeeze(C_ZZ.counts3(1,1,:)).';
+
+    % Compress to:
+    % [only D0, only D1, rest]
+    CA_counts = [Ck_A(2), Ck_A(1), Ck_A(3)];
+
+        [result_A, grad_A] = XXwindow_click_prob_asym_screened_fluct( ...
+        signal_A, 0, ...
+        pd0, pc0, pa0, ...
+        pd1, pc1, pa1, ...
+        alpha_A, alpha_B, dAC, dBC, ...
+        lambda, fluct_sigma, ...
+        'nGH', 15);
+
+    % Model probability order:
+    % [only D0, only D1, rest]
+    P3_A = [result_A.P_only_D0, result_A.P_only_D1, result_A.P_rest];
+    P3_A = max(P3_A, eps);
+
+    % Simulation event order:
+    % [D1_only, D0_only, rest]
+    Ck_A = squeeze(C_ZZ.counts3(1,1,:)).';
+
+    % Compress to:
+    % [only D0, only D1, rest]
+    CA_counts = [Ck_A(2), Ck_A(1), Ck_A(3)];
+
+    log_likelihood_ZZ = sum(CA_counts .* log(P3_A)) + sum(CB_counts .* log(P3_B));
+
+
+    for i = 1:nA
+
+        [result, grad_A] = XXwindow_click_prob_asym_screened_fluct( ...
+                decoy_A(i), decoy_B(i), ...
+                pd0, pc0, pa0, ...
+                pd1, pc1, pa1, ...
+                alpha_A, alpha_B, dAC, dBC, ...
+                lambda, fluct_sigma, ...
+                'nGH', 15);
+
+            % Model probability order:
+            % [only D0, only D1, rest]
+            P3_A = [result.P_only_D0, result.P_only_D1, result.P_rest];
+            P3_A = max(P3_A, epsP);
+
+            % Simulation event order:
+            % [D1_only, D0_only, rest]
+            Ck_A = squeeze(C_ZZ.counts3(i,i,:)).';
+
+            % Compress to:
+            % [only D0, only D1, rest]
+            C_counts = [Ck_A(2), Ck_A(1), Ck_A(3)];
+
+            log_likelihood_ZZ = log_likelihood_ZZ + sum(C_counts .* log(P3_A));
+
+            % grad.muA = [dP_only_D0, dP_only_D1, dP_rest]
+            % grad.muB = [dP_only_D0, dP_only_D1, dP_rest]
+            
+            d_log_likelihood_ZZ(i) = d_log_likelihood_ZZ(i)    + sum(C_counts .* grad_A.muA ./ P3_A);
+
+            d_log_likelihood_ZZ(nA+i) = d_log_likelihood_ZZ(nA+i) + sum(C_counts .* grad_A.muB ./ P3_A);
+    end
+
+end
