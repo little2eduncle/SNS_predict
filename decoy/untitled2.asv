@@ -1,0 +1,78 @@
+
+signal_A = 0.425;
+signal_B = 0.425;
+ 0.0979    0.1936    0.0967    0.1951
+ 0.1025    0.2076    0.1034    0.2048
+decoy_A1_L = 0.0979;
+decoy_A1_U = 0.1025;
+
+decoy_B1_L = 0.0936;
+decoy_B1_U = 0.1034;
+
+decoy_A2_L = 0.1936;
+decoy_A2_U = 0.2076;
+
+decoy_B2_L = 0.2011;
+decoy_B2_U = 0.2011;
+
+P_us_1 = signal_A*exp(-signal_A)*exp(-signal_B)+signal_B*exp(-signal_B)*exp(-signal_A);
+
+P_u_d1_0_L = exp(-decoy_A1_L) * exp(-decoy_B1_L);
+P_u_d2_0_L = exp(-decoy_A2_L) * exp(-decoy_B2_L);
+
+P_u_d1_0_U = exp(-decoy_A1_U) * exp(-decoy_B1_U);
+P_u_d2_0_U = exp(-decoy_A2_U) * exp(-decoy_B2_U);
+
+P_u_d1_1_L = decoy_A1_L * exp(-decoy_A1_L) * exp(-decoy_B1_L) + decoy_B1_L * exp(-decoy_B1_L) * exp(-decoy_A1_L);
+P_u_d2_1_L = decoy_A2_L * exp(-decoy_A2_L) * exp(-decoy_B2_L) + decoy_B2_L * exp(-decoy_B2_L) * exp(-decoy_A2_L);
+
+P_u_d1_1_U = decoy_A1_U * exp(-decoy_A1_U) * exp(-decoy_B1_U) + decoy_B1_U * exp(-decoy_B1_U) * exp(-decoy_A1_U);
+P_u_d2_1_U = decoy_A2_U * exp(-decoy_A2_U) * exp(-decoy_B2_U) + decoy_B2_U * exp(-decoy_B2_U) * exp(-decoy_A2_U);
+
+P_u_d1_2_L = exp(-decoy_A1_L) * 0.5 * decoy_B1_L^2 * exp(-decoy_B1_L) + ...
+             exp(-decoy_B1_L) * 0.5 * decoy_A1_L^2 * exp(-decoy_A1_L) + ...
+             decoy_A1_L * exp(-decoy_A1_L) * decoy_B1_L * exp(-decoy_B1_L);
+P_u_d2_2_L = exp(-decoy_A2_L) * 0.5 * decoy_B2_L^2 * exp(-decoy_B2_L) + ...
+             exp(-decoy_B2_L) * 0.5 * decoy_A2_L^2 * exp(-decoy_A2_L) + ...
+             decoy_A2_L * exp(-decoy_A2_L) * decoy_B2_L * exp(-decoy_B2_L);
+
+P_u_d1_2_U = exp(-decoy_A1_U) * 0.5 * decoy_B1_U^2 * exp(-decoy_B1_U) + ...
+             exp(-decoy_B1_U) * 0.5 * decoy_A1_U^2 * exp(-decoy_A1_U) + ...
+             decoy_A1_U * exp(-decoy_A1_U) * decoy_B1_U * exp(-decoy_B1_U);
+P_u_d2_2_U = exp(-decoy_A2_U) * 0.5 * decoy_B2_U^2 * exp(-decoy_B2_U) + ...
+             exp(-decoy_B2_U) * 0.5 * decoy_A2_U^2 * exp(-decoy_A2_U) + ...
+             decoy_A2_U * exp(-decoy_A2_U) * decoy_B2_U * exp(-decoy_B2_U);
+
+alpha = 0.21;
+epsilon = 0.978; 
+d = 50;
+e_det = 0.02;
+eta = 10^(-alpha * d / 10);
+f = 1.1;
+
+us = signal_A + signal_B;
+u_d1 = 0.0971 + 0.0979;
+u_d2 = 0.2045 + 0.2011;
+
+S_us = 1-(1-pd)^2 * exp(-us*pc*eta);
+S_u_d1 = 1-(1-pd)^2 * exp(-u_d1*pc*eta);
+S_u_d2 = 1-(1-pd)^2 * exp(-u_d2*pc*eta);
+S_u0 = 1-(1-pd)^2;
+
+E_us = 0.5 - 1/(2*S_us) * (1-pd) * (exp(-us*eta*pc*e_det)-exp(-us*eta*pc*(1-e_det)));
+E_u_d1 = 0.5 - 1/(2*S_u_d1) * (1-pd) * (exp(-u_d1*eta*pc*e_det)-exp(-u_d1*eta*pc*(1-e_det)));
+E_u_d2 = 0.5 - 1/(2*S_u_d2) * (1-pd) * (exp(-u_d2*eta*pc*e_det)-exp(-u_d2*eta*pc*(1-e_det)));
+E_u0 = 0.5;
+
+S_z = epsilon^2 * S_us + 2 * (1-epsilon) * epsilon * (1-(1-pd)^2 * exp(-us/2*pc*eta)) + (1-epsilon)^2 * S_u0;
+E_z = (epsilon^2 * S_us + (1-epsilon)^2 * S_u0) / S_z;
+
+s1 = (P_u_d2_2_U * (S_u_d1 - P_u_d1_0_U * S_u0) - P_u_d1_2_U * (S_u_d2 - P_u_d2_0_L * S_u0)) / ...
+     (P_u_d2_2_U * P_u_d1_1_U - P_u_d1_2_L * P_u_d2_1_L);
+
+e1 = (S_u_d1 * E_u_d1 - S_u0 * E_u0 * P_u_d1_0_L) / ...
+     (s1 * P_u_d1_1_L);
+disp(P_u_d2_2_U * (S_u_d1 - P_u_d1_0_U * S_u0));
+disp(P_u_d1_2_U * (S_u_d2 - P_u_d2_0_L * S_u0));
+disp(e1);
+% R1 = 2*epsilon(1-epsilon)*P_us_1*s1*(1-h(e1))-f*S_z*h(E_z);
